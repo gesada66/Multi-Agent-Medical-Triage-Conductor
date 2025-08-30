@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install)",
+      "Bash(npx tsx:*)",
+      "Bash(npm run demo:anthropic:*)",
+      "Bash(npm run demo:openai:*)",
+      "Bash(npm run demo:compare:*)",
+      "Bash(npm install:*)",
+      "Bash(npm run demo:cache-savings:*)",
+      "Bash(timeout 30 npm run demo:openai)",
+      "Bash(timeout 15 npm run demo:mock)",
+      "Bash(npm run)",
+      "Bash(npm run lint)",
+      "Bash(npm run typecheck:*)",
+      "Bash(timeout 30 npm run demo:anthropic)",
+      "Bash(timeout 20 npm run demo:openai)",
+      "Bash(git add:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

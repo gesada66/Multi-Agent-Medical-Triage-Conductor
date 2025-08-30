@@ -1,0 +1,90 @@
+{
+  "name": "multi-agent-medical-triage-conductor",
+  "version": "1.0.0",
+  "description": "Multi-agent AI system for medical triage using Next.js 14, TypeScript, and cost-optimized LLM providers",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "demo": "npx tsx scripts/demo-triage.ts",
+    "demo:openai": "npx tsx scripts/demo-triage.ts openai",
+    "demo:anthropic": "npx tsx scripts/demo-triage.ts anthropic",
+    "demo:chest-pain": "npx tsx scripts/demo-triage.ts anthropic chest-pain-emergency",
+    "demo:headache": "npx tsx scripts/demo-triage.ts anthropic headache-urgent",
+    "demo:compare": "npm run demo:anthropic && echo '\\n\\n=== SWITCHING TO OPENAI ===' && npm run demo:openai",
+    "demo:cache-savings": "npx tsx scripts/demo-cache-savings.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage",
+    "test:agents": "vitest run src/lib/sk/agents/",
+    "test:api": "vitest run tests/integration/api/",
+    "e2e": "playwright test",
+    "e2e:headed": "playwright test --headed",
+    "e2e:debug": "playwright test --debug",
+    "contract": "vitest run tests/contract/",
+    "perf": "k6 run tests/perf/k6/triage-smoke.js",
+    "perf:load": "k6 run tests/perf/k6/triage-load.js",
+    "health": "curl http://localhost:3000/api/health",
+    "health:full": "curl -X POST http://localhost:3000/api/health -H 'Content-Type: application/json' -d '{\"testType\": \"full\"}'",
+    "ci": "npm run lint && npm run typecheck && npm run test && npm run build",
+    "setup": "npm install && cp .env.example .env.local && echo 'Setup complete! Add your API keys to .env.local'",
+    "clean": "rm -rf .next dist node_modules/.cache",
+    "api:test-triage": "curl -X POST http://localhost:3000/api/triage -H 'Content-Type: application/json' -d '{\"mode\": \"patient\", \"input\": {\"text\": \"chest pain for 20 minutes\"}, \"patientId\": \"test-001\"}'",
+    "api:test-batch": "curl -X POST http://localhost:3000/api/triage/batch -H 'Content-Type: application/json' -d '{\"requests\": [{\"mode\": \"patient\", \"input\": {\"text\": \"headache\"}, \"patientId\": \"batch-001\"}], \"priority\": \"batch\"}'",
+    "docs:generate": "typedoc --out docs src/lib",
+    "docs:serve": "npx http-server docs -p 8080"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.27.0",
+    "@types/better-sqlite3": "^7.6.0",
+    "better-sqlite3": "^9.0.0",
+    "dotenv": "^17.2.1",
+    "next": "14.0.0",
+    "openai": "^4.20.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.40.0",
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@vitejs/plugin-react": "^4.0.0",
+    "eslint": "^8.45.0",
+    "eslint-config-next": "14.0.0",
+    "playwright": "^1.40.0",
+    "tsx": "^4.0.0",
+    "typedoc": "^0.25.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "keywords": [
+    "medical-triage",
+    "ai-agents",
+    "healthcare",
+    "nextjs",
+    "anthropic",
+    "openai",
+    "cost-optimization",
+    "semantic-kernel"
+  ],
+  "author": "Multi-Agent Medical Triage Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/your-org/multi-agent-medical-triage-conductor.git"
+  },
+  "bugs": {
+    "url": "https://github.com/your-org/multi-agent-medical-triage-conductor/issues"
+  },
+  "homepage": "https://github.com/your-org/multi-agent-medical-triage-conductor#readme"
+}
