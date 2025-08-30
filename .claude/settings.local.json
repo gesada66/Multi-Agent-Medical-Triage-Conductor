@@ -1,4 +1,5 @@
 {
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "permissions": {
     "allow": [
       "Bash(npm install)",
@@ -15,9 +16,17 @@
       "Bash(npm run typecheck:*)",
       "Bash(timeout 30 npm run demo:anthropic)",
       "Bash(timeout 20 npm run demo:openai)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git status)",
+      "Bash(git remote:*)"
     ],
     "deny": [],
     "ask": []
+  },
+  "includeCoAuthoredBy": true,
+  "env": {
+    "_CLAUDE_GITHUB_WORKFLOW_PREFS": "See .claude/github-workflow-preferences.md for detailed GitHub workflow preferences"
   }
 }
