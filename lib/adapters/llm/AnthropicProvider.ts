@@ -228,11 +228,23 @@ export class AnthropicProvider implements LlmProvider {
     // Check for complexity indicators that might require Sonnet
     const complexityIndicators = this.analyzeComplexity(messages);
     
-    // Use Sonnet for high complexity tasks, Haiku for everything else
-    if (complexityIndicators.requiresAdvancedReasoning) {
+    // Enhanced routing: Use Sonnet sparingly for truly complex reasoning
+    // Haiku handles: symptom parsing, simple triage, empathy, basic care pathways  
+    // Sonnet handles: complex differential diagnosis, multi-system analysis, edge cases
+    if (complexityIndicators.requiresAdvancedReasoning && complexityIndicators.complexityScore >= 4) {
+      logger.info('Model selection: Claude 3.5 Sonnet', { 
+        complexityScore: complexityIndicators.complexityScore,
+        reasons: complexityIndicators.reasons,
+        modelSelectionReason: 'High complexity medical reasoning required'
+      });
       return this.sonnetModel;
     }
-
+    
+    logger.info('Model selection: Claude 3.5 Haiku', { 
+      complexityScore: complexityIndicators.complexityScore,
+      reasons: complexityIndicators.reasons,
+      modelSelectionReason: 'Standard task - cost optimized'
+    });
     return this.defaultModel;
   }
 
@@ -279,10 +291,23 @@ export class AnthropicProvider implements LlmProvider {
       reasons.push('long input context');
     }
 
-    // Agent-specific routing (from system prompts)
+    // Agent-specific routing preferences
+    // Always use Haiku for these simple agents
+    if (allContent.includes('SymptomParserAgent') || allContent.includes('EmpathyCoachAgent')) {
+      complexityScore = Math.min(complexityScore, 2); // Force Haiku usage
+      reasons.push('simple agent task - haiku preferred');
+    }
+    
+    // Only use Sonnet for truly complex risk/pathway analysis
     if (allContent.includes('RiskStratifierAgent') || allContent.includes('CarePathwayPlannerAgent')) {
-      complexityScore += 1;
-      reasons.push('complex agent task');
+      // Don't automatically add complexity - let content determine routing
+      reasons.push('clinical reasoning agent');
+    }
+    
+    // Conductor agent should use Haiku unless orchestrating complex cases
+    if (allContent.includes('ConductorAgent')) {
+      complexityScore = Math.min(complexityScore, 3); // Lean toward Haiku
+      reasons.push('orchestration agent - haiku preferred');
     }
 
     return {

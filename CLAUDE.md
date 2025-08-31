@@ -50,6 +50,36 @@ The system uses 5 specialized agents orchestrated by Semantic Kernel:
 3. **Security**: OWASP headers, PII redaction in logs, schema validation on all requests
 4. **Accessibility**: Every UI change must pass Axe accessibility tests
 5. **Performance**: API responses must maintain p95 < 900ms under load
+6. **⚠️ API KEY PROTECTION**: ALWAYS disable API keys and enable mock mode when development session ends
+
+## 🚨 CRITICAL: API Key Management
+
+**MANDATORY END-OF-SESSION CHECKLIST:**
+- [ ] Comment out all API keys in `.env.local`
+- [ ] Set `MOCK_LLM_RESPONSES=true`
+- [ ] Kill all development servers (`npm run dev`, `pnpm dev`)
+- [ ] Verify no Node.js processes consuming API credits
+
+**Before ending any Claude Code session:**
+```bash
+# 1. Disable API keys
+sed -i 's/^OPENAI_API_KEY=/# OPENAI_API_KEY=/' .env.local
+sed -i 's/^ANTHROPIC_API_KEY=/# ANTHROPIC_API_KEY=/' .env.local
+
+# 2. Enable mock mode  
+sed -i 's/MOCK_LLM_RESPONSES=false/MOCK_LLM_RESPONSES=true/' .env.local
+
+# 3. Kill development servers
+pkill -f "npm run dev" || pkill -f "pnpm dev" || pkill -f "next dev"
+
+# 4. Verify no API-consuming processes
+ps aux | grep -E "(node|npm|next)" | grep -v grep
+```
+
+**Why this matters:**
+- Development servers can make unwanted API calls during testing
+- Forgotten API keys can consume subscription credits
+- Long-running processes may trigger rate limits or usage warnings
 
 ## Project Structure
 

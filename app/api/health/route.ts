@@ -107,7 +107,7 @@ export async function GET(request: NextRequest) {
     });
 
   } catch (error) {
-    logger.error('Health check failed', { error: error.message });
+    logger.error('Health check failed', { error: error instanceof Error ? error.message : String(error) });
 
     return NextResponse.json({
       status: 'unhealthy',

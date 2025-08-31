@@ -5,6 +5,7 @@ import { MemoryAugmentedRiskAgent } from './MemoryAugmentedRiskAgent';
 import { CarePathwayPlannerAgent } from './CarePathwayPlannerAgent';
 import { EmpathyCoachAgent } from './EmpathyCoachAgent';
 import { AgentFactory } from './AgentFactory';
+import { deriveRouting, assertConsistent } from '../../normalizers';
 import { logger } from '../../logger';
 
 export interface TriageRequest {
@@ -14,6 +15,7 @@ export interface TriageRequest {
     voiceData?: any; // Future: voice input support
   };
   patientId: string;
+  testCategory?: 'emergency' | 'urgent' | 'routine' | 'edge-case';
   patientContext?: {
     age?: number;
     gender?: string;
@@ -34,6 +36,7 @@ export interface TriageResponse {
   adaptedResponse: any;
   confidence: number;
   citations: any[];
+  routing: { priority: string; testCategory?: string; }; // <-- NEW
   traceId: string;
   processingTime: number;
   costMetrics?: {
@@ -138,6 +141,15 @@ export class ConductorAgent {
         request.patientContext
       );
 
+      // Step 7.5: Compute routing metadata
+      assertConsistent(riskResult.risk.band, request.testCategory);
+      const routing = deriveRouting(riskResult.risk.band, {
+        testCategory: request.testCategory,
+        // optionally:
+        // isAfterHours: clock.isAfterHours(),
+        // systemLoad: metrics.load(),
+      });
+
       // Step 8: Compile final response
       const response: TriageResponse = {
         evidence: evidenceResult.evidence,
@@ -151,6 +163,7 @@ export class ConductorAgent {
           adaptedResult.confidence
         ]),
         citations: carePlanResult.citations || [],
+        routing, // <-- NEW
         traceId,
         processingTime: Date.now() - startTime
       };

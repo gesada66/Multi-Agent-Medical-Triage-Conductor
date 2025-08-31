@@ -1,5 +1,10 @@
 import { z } from 'zod';
 
+// --- NEW: taxonomy enums
+export const RiskBand = z.enum(["immediate","urgent","routine"]);
+export const OpsPriority = z.enum(["immediate","urgent","routine","batch"]);
+export const TestCategory = z.enum(["emergency","urgent","routine","edge-case"]);
+
 // Core data schemas matching the project specification
 export const ClinicalEvidence = z.object({
   patientId: z.string(),
@@ -30,7 +35,7 @@ export const ClinicalEvidence = z.object({
 export type TClinicalEvidence = z.infer<typeof ClinicalEvidence>;
 
 export const RiskAssessment = z.object({
-  band: z.enum(['immediate', 'urgent', 'routine']),
+  band: RiskBand,
   pUrgent: z.number().min(0).max(1),
   explain: z.array(z.string()),
   requiredInvestigations: z.array(z.string()).optional(),
@@ -49,6 +54,13 @@ export const CarePlan = z.object({
 });
 
 export type TCarePlan = z.infer<typeof CarePlan>;
+
+// --- NEW: routing metadata (derived)
+export const RoutingMeta = z.object({
+  priority: OpsPriority,
+  testCategory: TestCategory.optional(),
+});
+export type TRoutingMeta = z.infer<typeof RoutingMeta>;
 
 export const TriageRequest = z.object({
   mode: z.enum(['patient', 'clinician']).default('clinician'),
@@ -95,6 +107,7 @@ export const TriageResponse = z.object({
     snippet: z.string(),
     guideline: z.string().optional(),
   })),
+  routing: RoutingMeta, // <-- NEW
   traceId: z.string(),
   processingTime: z.number(),
   costMetrics: z.object({

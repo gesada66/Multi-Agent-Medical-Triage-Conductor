@@ -1,5 +1,9 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "env": {
+    "_CLAUDE_GITHUB_WORKFLOW_PREFS": "See .claude/github-workflow-preferences.md for detailed GitHub workflow preferences"
+  },
+  "includeCoAuthoredBy": true,
   "permissions": {
     "allow": [
       "Bash(npm install)",
@@ -20,13 +24,35 @@
       "Bash(git commit:*)",
       "Bash(git push:*)",
       "Bash(git status)",
-      "Bash(git remote:*)"
+      "Bash(git remote:*)",
+      "Bash(git rm:*)",
+      "Bash(npm run dev:*)",
+      "Bash(curl:*)",
+      "Read(C:\\temp/**)",
+      "Bash(claude mcp add:*)",
+      "Bash(npx playwright test:*)",
+      "Bash(npx playwright:*)",
+      "Read(c:\\Users\\georg\\Downloads/**)",
+      "Read(c:\\Users\\georg\\claude-code-project\\Multi-Agent-Medical-Triage-Conductor/**)",
+      "Read(c:\\Users\\georg\\Downloads/**)",
+      "Read(c:\\Users\\georg\\claude-code-project\\Multi-Agent-Medical-Triage-Conductor/**)",
+      "Bash(pnpm dlx shadcn-ui:*)",
+      "Bash(npx shadcn-ui:*)",
+      "Bash(npx shadcn@latest add:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm uninstall:*)",
+      "Bash(dir:*)",
+      "Bash(npm run test:*)",
+      "Bash(node:*)",
+      "Bash(sudo apt-get:*)",
+      "Bash(sudo apt-get install:*)",
+      "Bash(npx tsc:*)",
+      "Bash(ss:*)"
     ],
     "deny": [],
-    "ask": []
-  },
-  "includeCoAuthoredBy": true,
-  "env": {
-    "_CLAUDE_GITHUB_WORKFLOW_PREFS": "See .claude/github-workflow-preferences.md for detailed GitHub workflow preferences"
+    "ask": [],
+    "additionalDirectories": [
+      "/home/gsada/.cache/ms-playwright"
+    ]
   }
 }

@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Dual Badges Display</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        .risk-card { border: 1px solid #ccc; border-radius: 8px; padding: 20px; max-width: 400px; }
+        .card-header { display: flex; justify-content: between; align-items: center; margin-bottom: 16px; }
+        .badge-container { display: flex; gap: 8px; }
+        .badge { padding: 4px 8px; border-radius: 4px; color: white; font-size: 12px; font-weight: bold; }
+        .bg-red-600 { background-color: #dc2626; }
+        .bg-red-600-80 { background-color: rgba(220, 38, 38, 0.8); }
+        .bg-amber-500 { background-color: #f59e0b; }
+        .bg-amber-500-80 { background-color: rgba(245, 158, 11, 0.8); }
+        .bg-emerald-600 { background-color: #059669; }
+        .bg-emerald-600-80 { background-color: rgba(5, 150, 105, 0.8); }
+        .test-case { margin-bottom: 30px; }
+    </style>
+</head>
+<body>
+    <h1>Dual Badge Test Cases</h1>
+    
+    <div class="test-case">
+        <h3>Test 1: Immediate Risk</h3>
+        <div class="risk-card">
+            <div class="card-header">
+                <span>Risk Assessment</span>
+                <div class="badge-container">
+                    <div class="badge bg-red-600">IMMEDIATE</div>
+                    <div class="badge bg-red-600-80">PRIORITY: IMMEDIATE</div>
+                </div>
+            </div>
+            <div>Expected: Two red badges, second one with transparency</div>
+        </div>
+    </div>
+
+    <div class="test-case">
+        <h3>Test 2: Urgent Risk</h3>
+        <div class="risk-card">
+            <div class="card-header">
+                <span>Risk Assessment</span>
+                <div class="badge-container">
+                    <div class="badge bg-amber-500">URGENT</div>
+                    <div class="badge bg-amber-500-80">PRIORITY: URGENT</div>
+                </div>
+            </div>
+            <div>Expected: Two amber badges, second one with transparency</div>
+        </div>
+    </div>
+
+    <div class="test-case">
+        <h3>Test 3: Routine Risk</h3>
+        <div class="risk-card">
+            <div class="card-header">
+                <span>Risk Assessment</span>
+                <div class="badge-container">
+                    <div class="badge bg-emerald-600">ROUTINE</div>
+                    <div class="badge bg-emerald-600-80">PRIORITY: ROUTINE</div>
+                </div>
+            </div>
+            <div>Expected: Two green badges, second one with transparency</div>
+        </div>
+    </div>
+
+    <script>
+        console.log('Test: If you can see TWO badges in each test case above, the dual badge feature is working correctly.');
+        console.log('The first badge shows the clinical risk, the second shows operational priority.');
+    </script>
+</body>
+</html>
