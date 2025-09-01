@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
       try {
         return validateTriageRequest(req);
       } catch (error) {
-        throw new Error(`Request ${index + 1} validation failed: ${error.message}`);
+        throw new Error(`Request ${index + 1} validation failed: ${error instanceof Error ? error.message : String(error)}`);
       }
     });
 

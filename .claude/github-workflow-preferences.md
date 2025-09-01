@@ -108,6 +108,55 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 - Feature branches only for major architectural changes
 - Immediate deployment of documentation updates
 
+## 🔐 **WSL-Specific GitHub Authentication Process**
+
+### **Initial Setup (One-time only):**
+When working in WSL environment, follow these steps to establish persistent GitHub authentication:
+
+1. **Store Token in ~/.bashrc**
+   ```bash
+   # Edit ~/.bashrc to add:
+   export GITHUB_TOKEN=your_github_personal_access_token_here
+   ```
+
+2. **Reload Environment**
+   ```bash
+   source ~/.bashrc
+   ```
+
+3. **Verify Authentication**
+   ```bash
+   gh auth status
+   ```
+
+### **Authentication Troubleshooting:**
+If `gh auth status` shows authentication failure:
+
+1. **Clear existing invalid tokens**
+   ```bash
+   unset GITHUB_TOKEN
+   gh auth logout --hostname github.com
+   ```
+
+2. **Re-authenticate with stored token**
+   ```bash
+   source ~/.bashrc  # Reload token from ~/.bashrc
+   gh auth status    # Should now work automatically
+   ```
+
+### **Key WSL Authentication Facts:**
+- ✅ **Environment Variable Method**: GitHub CLI automatically uses `GITHUB_TOKEN` when set
+- ✅ **No Manual Login Needed**: `gh auth login --with-token` is NOT required
+- ✅ **Persistent Across Sessions**: Token stored in `~/.bashrc` persists across WSL restarts
+- ✅ **Automatic Detection**: GitHub CLI detects and uses environment token automatically
+
+### **Git Credential Configuration:**
+```bash
+# Configure git to use GitHub CLI for authentication
+gh auth setup-git
+git config --global --replace-all credential.https://github.com.helper '!gh auth git-credential'
+```
+
 ## 🚨 **Important Reminders**
 
 1. **No Terminal Exit Required**: Claude can handle all git operations through Bash tool in chat
@@ -115,9 +164,33 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 3. **Comprehensive Commits**: Explain what was done and why it matters
 4. **Attribution Required**: Include Claude Code footer on all commits
 5. **Push Confirmation**: Always verify successful sync with remote repository
+6. **WSL Token Management**: Token is stored in `~/.bashrc` for persistent authentication
+
+## 🔑 **Token Management for Future Sessions**
+
+### **For Claude Code Agents:**
+When starting a new Claude Code session in WSL:
+
+1. **Automatic Token Loading**: Token is already stored in `~/.bashrc`
+2. **Verification Command**: Run `gh auth status` to confirm authentication
+3. **If Authentication Fails**: Run `source ~/.bashrc` and check again
+
+### **Token Security Best Practices:**
+- ✅ Token stored in user home directory with proper permissions
+- ✅ Only accessible to your user account
+- ✅ Automatically loaded in all new terminal sessions
+- ✅ No need to re-enter token manually
+
+### **For Future Claude Code Projects:**
+This authentication setup works across all repositories and projects in WSL environment. Future Claude Code agents can:
+- Access GitHub operations immediately
+- Use `gh` CLI commands without additional setup
+- Perform git operations with remote repositories
+- Handle PR creation, issues, and repository management
 
 ---
 
-**Last Updated**: December 2024  
-**Applies to**: All repositories when working with Claude Code  
+**Last Updated**: January 2025  
+**Applies to**: All repositories when working with Claude Code in WSL  
+**Authentication Status**: ✅ Persistent Token Storage Configured  
 **Workflow Status**: ✅ Active and Preferred

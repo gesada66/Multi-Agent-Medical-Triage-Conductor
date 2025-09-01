@@ -114,7 +114,7 @@ export async function GET(request: NextRequest) {
       timestamp: new Date().toISOString(),
       error: {
         type: 'HEALTH_CHECK_ERROR',
-        message: error.message,
+        message: error instanceof Error ? error.message : String(error),
       },
       processingTime: Date.now() - startTime,
     }, { 
@@ -154,7 +154,7 @@ async function testProviders(): Promise<{
       results.openai = {
         available: false,
         responseTime: Date.now() - startTime,
-        error: error.message,
+        error: error instanceof Error ? error.message : String(error),
       };
     }
   }
@@ -185,7 +185,7 @@ async function testProviders(): Promise<{
       results.anthropic = {
         available: false,
         responseTime: Date.now() - startTime,
-        error: error.message,
+        error: error instanceof Error ? error.message : String(error),
       };
     }
   }
@@ -216,11 +216,11 @@ export async function POST(request: NextRequest) {
     return GET(request);
 
   } catch (error) {
-    logger.error('Advanced health check failed', { error: error.message });
+    logger.error('Advanced health check failed', { error: error instanceof Error ? error.message : String(error) });
     
     return NextResponse.json({
       error: 'Advanced health check failed',
-      message: error.message,
+      message: error instanceof Error ? error.message : String(error),
       timestamp: new Date().toISOString(),
     }, { status: 500 });
   }
@@ -283,7 +283,7 @@ async function performFullSystemTest(): Promise<NextResponse> {
       processingTime: Date.now() - startTime,
       error: {
         type: 'FULL_SYSTEM_TEST_ERROR',
-        message: error.message,
+        message: error instanceof Error ? error.message : String(error),
       },
     }, { status: 503 });
   }
@@ -316,7 +316,7 @@ async function testSpecificProviders(providers: string[]): Promise<any> {
       } catch (error) {
         results[providerName] = {
           available: false,
-          error: error.message,
+          error: error instanceof Error ? error.message : String(error),
         };
       } finally {
         // Restore original provider
@@ -359,7 +359,7 @@ async function getMemoryRAGStatus() {
       deploymentMode: memoryRagHealth.memoryRagEnabled ? 'Azure Cloud' : 'Local Development'
     };
   } catch (error) {
-    logger.error('Memory RAG health check failed', { error: error.message });
+    logger.error('Memory RAG health check failed', { error: error instanceof Error ? error.message : String(error) });
     return {
       enabled: false,
       vectorDatabase: { type: 'N/A', available: false, status: 'error' },
@@ -371,7 +371,7 @@ async function getMemoryRAGStatus() {
         populationSpecificLearning: false
       },
       deploymentMode: 'Local Development',
-      error: error.message
+      error: error instanceof Error ? error.message : String(error)
     };
   }
 }
