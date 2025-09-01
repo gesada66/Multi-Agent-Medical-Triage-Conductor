@@ -47,7 +47,12 @@
       "Bash(sudo apt-get:*)",
       "Bash(sudo apt-get install:*)",
       "Bash(npx tsc:*)",
-      "Bash(ss:*)"
+      "Bash(ss:*)",
+      "Bash(lsof:*)",
+      "Bash(grep:*)",
+      "Bash(find:*)",
+      "Bash(jobs)",
+      "Bash(rm:*)"
     ],
     "deny": [],
     "ask": [],
