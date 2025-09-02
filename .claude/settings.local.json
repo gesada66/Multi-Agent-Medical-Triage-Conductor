@@ -125,7 +125,17 @@
       "Bash(APP_PLAN=\"triage-container-plan\")",
       "Bash(APP_NAME=\"triage-container-demo\")",
       "Bash(timeout 30s az webapp log tail --resource-group \"FoundryAI-PoC\" --name \"triage-container-demo\")",
-      "Bash(az identity delete:*)"
+      "Bash(az identity delete:*)",
+      "Bash(npm ci:*)",
+      "Bash(NODE_OPTIONS=\"--max-old-space-size=4096\" npm run build)",
+      "Bash(docker create:*)",
+      "Bash(docker cp:*)",
+      "Bash(docker rm:*)",
+      "Bash(APP_PLAN=\"triage-webapp-plan\")",
+      "Bash(az webapp deploy:*)",
+      "Bash(timeout 30s az webapp log tail --resource-group FoundryAI-PoC --name triage-webapp-1756801495)",
+      "Bash(APP_URL=\"triage-webapp-1756801495.azurewebsites.net\")",
+      "Bash(az webapp list:*)"
     ],
     "deny": [],
     "ask": [],

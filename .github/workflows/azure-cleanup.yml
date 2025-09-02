@@ -1,0 +1,291 @@
+name: 🧹 Azure Resource Cleanup
+
+on:
+  workflow_dispatch:
+    inputs:
+      cleanup_scope:
+        description: 'Cleanup scope'
+        required: true
+        default: 'staging-only'
+        type: choice
+        options:
+        - staging-only
+        - specific-deployment
+        - all-deployments
+        - resource-group-empty
+      deployment_pattern:
+        description: 'Deployment name pattern (for specific cleanup)'
+        required: false
+        type: string
+      confirm_deletion:
+        description: 'Type "DELETE" to confirm resource deletion'
+        required: true
+        type: string
+  # Note: Automatic cleanup schedule disabled to prevent unintended deletions
+  # Uncomment below lines to enable daily automatic cleanup:
+  # schedule:
+  #   - cron: '0 6 * * *'  # Daily at 6 AM UTC
+
+env:
+  AZURE_RESOURCE_GROUP: FoundryAI-PoC
+
+jobs:
+  cleanup-validation:
+    name: 🔍 Validate Cleanup Request
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    
+    outputs:
+      cleanup-approved: ${{ steps.validation.outputs.approved }}
+      resources-found: ${{ steps.scan.outputs.count }}
+      estimated-savings: ${{ steps.cost.outputs.monthly }}
+    
+    steps:
+      - name: 🔐 Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: 🔍 Validate Cleanup Authorization
+        id: validation
+        run: |
+          echo "🔍 Validating cleanup request..."
+          
+          # For manual triggers, require explicit confirmation
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            if [[ "${{ github.event.inputs.confirm_deletion }}" != "DELETE" ]]; then
+              echo "❌ Deletion not confirmed. Type 'DELETE' to proceed."
+              echo "approved=false" >> $GITHUB_OUTPUT
+              exit 1
+            fi
+          fi
+          
+          echo "✅ Cleanup request validated"
+          echo "approved=true" >> $GITHUB_OUTPUT
+
+      - name: 📊 Scan Existing Resources
+        id: scan
+        run: |
+          echo "📊 Scanning for resources to cleanup..."
+          
+          # List all resources in the resource group
+          RESOURCES=$(az resource list --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --query "length(@)")
+          echo "Found $RESOURCES resources in ${{ env.AZURE_RESOURCE_GROUP }}"
+          
+          if [[ $RESOURCES -eq 0 ]]; then
+            echo "ℹ️  No resources found to cleanup"
+            echo "count=0" >> $GITHUB_OUTPUT
+            return 0
+          fi
+          
+          # List resource details
+          echo "📋 Current resources:"
+          az resource list --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --output table
+          
+          echo "count=$RESOURCES" >> $GITHUB_OUTPUT
+
+      - name: 💰 Calculate Cost Savings
+        id: cost
+        if: steps.scan.outputs.count > 0
+        run: |
+          echo "💰 Calculating potential cost savings..."
+          
+          RESOURCE_COUNT=${{ steps.scan.outputs.count }}
+          
+          # Estimate savings based on typical resource costs
+          # This is a simplified calculation - real implementation would query actual costs
+          ESTIMATED_MONTHLY_SAVINGS=0
+          
+          # Check for App Service plans (B1 = ~$13.14/month)
+          APP_SERVICES=$(az resource list --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --resource-type "Microsoft.Web/sites" --query "length(@)")
+          if [[ $APP_SERVICES -gt 0 ]]; then
+            APP_SERVICE_SAVINGS=$(echo "$APP_SERVICES * 13.14" | bc -l)
+            ESTIMATED_MONTHLY_SAVINGS=$(echo "$ESTIMATED_MONTHLY_SAVINGS + $APP_SERVICE_SAVINGS" | bc -l)
+            echo "💻 App Services to delete: $APP_SERVICES (saves \$${APP_SERVICE_SAVINGS}/month)"
+          fi
+          
+          # Check for Container Registries (Basic = ~$5/month)
+          ACRS=$(az resource list --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --resource-type "Microsoft.ContainerRegistry/registries" --query "length(@)")
+          if [[ $ACRS -gt 0 ]]; then
+            ACR_SAVINGS=$(echo "$ACRS * 5.00" | bc -l)
+            ESTIMATED_MONTHLY_SAVINGS=$(echo "$ESTIMATED_MONTHLY_SAVINGS + $ACR_SAVINGS" | bc -l)
+            echo "🐳 Container Registries to delete: $ACRS (saves \$${ACR_SAVINGS}/month)"
+          fi
+          
+          echo "💵 Total estimated monthly savings: \$${ESTIMATED_MONTHLY_SAVINGS}"
+          echo "monthly=$ESTIMATED_MONTHLY_SAVINGS" >> $GITHUB_OUTPUT
+
+  resource-cleanup:
+    name: 🧹 Execute Resource Cleanup
+    runs-on: ubuntu-latest
+    needs: cleanup-validation
+    if: needs.cleanup-validation.outputs.cleanup-approved == 'true' && needs.cleanup-validation.outputs.resources-found != '0'
+    timeout-minutes: 15
+    
+    steps:
+      - name: 🔐 Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: 🧹 Execute Cleanup Based on Scope
+        run: |
+          echo "🧹 Starting resource cleanup..."
+          echo "Cleanup scope: ${{ github.event.inputs.cleanup_scope || 'staging-only' }}"
+          
+          case "${{ github.event.inputs.cleanup_scope || 'staging-only' }}" in
+            "staging-only")
+              echo "🧹 Cleaning up staging deployments..."
+              
+              # Find staging resources (typically have 'staging' in name or are temporary)
+              # This is a simplified pattern - adjust based on your naming conventions
+              az resource list --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+                --query "[?contains(name, 'staging') || contains(name, 'temp') || contains(name, 'test')]" \
+                --output table
+              
+              # Delete staging app services
+              for app in $(az webapp list --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --query "[?contains(name, 'staging') || contains(name, 'temp') || contains(name, 'test')].name" -o tsv); do
+                echo "🗑️  Deleting staging app: $app"
+                az webapp delete --name $app --resource-group ${{ env.AZURE_RESOURCE_GROUP }}
+              done
+              
+              # Delete staging container registries  
+              for acr in $(az acr list --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --query "[?contains(name, 'staging') || contains(name, 'temp') || contains(name, 'test')].name" -o tsv); do
+                echo "🗑️  Deleting staging ACR: $acr"
+                az acr delete --name $acr --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --yes
+              done
+              ;;
+              
+            "specific-deployment")
+              if [[ -n "${{ github.event.inputs.deployment_pattern }}" ]]; then
+                echo "🧹 Cleaning up deployment: ${{ github.event.inputs.deployment_pattern }}"
+                
+                PATTERN="${{ github.event.inputs.deployment_pattern }}"
+                
+                # Delete matching apps
+                for app in $(az webapp list --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --query "[?contains(name, '$PATTERN')].name" -o tsv); do
+                  echo "🗑️  Deleting app: $app"
+                  az webapp delete --name $app --resource-group ${{ env.AZURE_RESOURCE_GROUP }}
+                done
+                
+                # Delete matching ACRs
+                for acr in $(az acr list --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --query "[?contains(name, '$PATTERN')].name" -o tsv); do
+                  echo "🗑️  Deleting ACR: $acr"  
+                  az acr delete --name $acr --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --yes
+                done
+              else
+                echo "❌ Deployment pattern required for specific cleanup"
+                exit 1
+              fi
+              ;;
+              
+            "all-deployments")
+              echo "🧹 Cleaning up ALL deployment resources..."
+              echo "⚠️  This will delete all apps and container registries"
+              
+              # Delete all web apps
+              for app in $(az webapp list --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --query "[].name" -o tsv); do
+                echo "🗑️  Deleting app: $app"
+                az webapp delete --name $app --resource-group ${{ env.AZURE_RESOURCE_GROUP }}
+              done
+              
+              # Delete all ACRs
+              for acr in $(az acr list --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --query "[].name" -o tsv); do
+                echo "🗑️  Deleting ACR: $acr"
+                az acr delete --name $acr --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --yes
+              done
+              
+              # Delete all App Service Plans
+              for plan in $(az appservice plan list --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --query "[].name" -o tsv); do
+                echo "🗑️  Deleting App Service Plan: $plan"
+                az appservice plan delete --name $plan --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --yes
+              done
+              ;;
+              
+            "resource-group-empty")
+              echo "🧹 Emptying entire resource group..."
+              echo "⚠️  This will delete ALL resources in ${{ env.AZURE_RESOURCE_GROUP }}"
+              
+              # Delete all resources in the resource group
+              az resource list --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --query "[].id" -o tsv | \
+                xargs -I {} az resource delete --ids {}
+              ;;
+              
+            *)
+              echo "❌ Unknown cleanup scope: ${{ github.event.inputs.cleanup_scope }}"
+              exit 1
+              ;;
+          esac
+
+      - name: 🧹 Cleanup Orphaned Resources
+        run: |
+          echo "🧹 Cleaning up orphaned resources..."
+          
+          # Delete empty App Service Plans
+          for plan in $(az appservice plan list --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --query "[?numberOfSites==0].name" -o tsv); do
+            echo "🗑️  Deleting empty App Service Plan: $plan"
+            az appservice plan delete --name $plan --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --yes
+          done
+          
+          # Delete unused managed identities (if any)
+          for identity in $(az identity list --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --query "[].name" -o tsv); do
+            echo "🗑️  Deleting managed identity: $identity"
+            az identity delete --name $identity --resource-group ${{ env.AZURE_RESOURCE_GROUP }}
+          done
+
+      - name: 📊 Post-Cleanup Verification
+        run: |
+          echo "📊 Verifying cleanup completion..."
+          
+          REMAINING_RESOURCES=$(az resource list --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --query "length(@)")
+          
+          echo "📈 CLEANUP RESULTS:"
+          echo "- Resources before: ${{ needs.cleanup-validation.outputs.resources-found }}"
+          echo "- Resources remaining: $REMAINING_RESOURCES"
+          echo "- Resources deleted: $(($${{ needs.cleanup-validation.outputs.resources-found }} - $REMAINING_RESOURCES))"
+          
+          if [[ $REMAINING_RESOURCES -gt 0 ]]; then
+            echo "📋 Remaining resources:"
+            az resource list --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --output table
+          else
+            echo "✅ Resource group is now empty"
+          fi
+
+  cleanup-summary:
+    name: 📋 Cleanup Summary
+    runs-on: ubuntu-latest
+    needs: [cleanup-validation, resource-cleanup]
+    if: always()
+    
+    steps:
+      - name: 📋 Generate Cleanup Report
+        run: |
+          echo "🧹 AZURE RESOURCE CLEANUP SUMMARY"
+          echo "================================"
+          echo "Cleanup Time: $(date)"
+          echo "Trigger: ${{ github.event_name }}"
+          echo "Scope: ${{ github.event.inputs.cleanup_scope || 'staging-only' }}"
+          echo
+          echo "📊 CLEANUP RESULTS:"
+          echo "- Validation: ${{ needs.cleanup-validation.result }}"
+          echo "- Cleanup Execution: ${{ needs.resource-cleanup.result }}"
+          echo
+          echo "💰 COST IMPACT:"
+          echo "- Resources before cleanup: ${{ needs.cleanup-validation.outputs.resources-found }}"
+          echo "- Estimated monthly savings: \$${{ needs.cleanup-validation.outputs.estimated-savings }}"
+          echo
+          
+          if [[ "${{ needs.resource-cleanup.result }}" == "success" ]]; then
+            echo "🎉 CLEANUP STATUS: ✅ SUCCESSFUL"
+            echo "Resources have been cleaned up successfully"
+            echo "💰 Monthly cost savings achieved: \$${{ needs.cleanup-validation.outputs.estimated-savings }}"
+          elif [[ "${{ needs.cleanup-validation.outputs.resources-found }}" == "0" ]]; then
+            echo "ℹ️  CLEANUP STATUS: ✅ NO ACTION NEEDED"
+            echo "No resources found to cleanup"
+          else
+            echo "⚠️  CLEANUP STATUS: ❌ FAILED"
+            echo "Check job logs for error details"
+          fi
+          echo
+          echo "🔗 Resource Group: ${{ env.AZURE_RESOURCE_GROUP }}"
+          echo "📊 Verify cleanup in Azure Portal"

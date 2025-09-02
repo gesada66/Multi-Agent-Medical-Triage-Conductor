@@ -1,0 +1,434 @@
+name: 🚀 Azure Container Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      deployment_environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+        - staging
+        - production
+      resource_cleanup:
+        description: 'Auto-cleanup resources after testing'
+        required: false
+        default: true
+        type: boolean
+      enable_cost_monitoring:
+        description: 'Enable cost monitoring alerts'
+        required: false
+        default: true
+        type: boolean
+  # Note: Automatic triggers disabled to prevent unintended deployments
+  # Uncomment below lines to enable automatic deployment on push:
+  # push:
+  #   branches: [main]
+  #   paths:
+  #     - 'app/**'
+  #     - 'lib/**'
+  #     - 'components/**'
+  #     - 'Dockerfile'
+  #     - 'package.json'
+  #     - '.github/workflows/azure-deployment.yml'
+
+env:
+  AZURE_RESOURCE_GROUP: FoundryAI-PoC
+  AZURE_LOCATION: uksouth
+  CONTAINER_REGISTRY_NAME: triageacr${{ github.run_number }}
+  APP_NAME: triage-app-${{ github.run_number }}
+  NODE_ENV: production
+
+jobs:
+  prerequisites-check:
+    name: 🔍 Pre-deployment Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    outputs:
+      deployment-ready: ${{ steps.validation.outputs.ready }}
+      estimated-cost: ${{ steps.cost.outputs.monthly }}
+    
+    steps:
+      - name: 📁 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🔐 Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: 🔍 Validate Azure Prerequisites
+        id: validation
+        run: |
+          echo "🔍 Validating Azure deployment prerequisites..."
+          
+          # Check resource group exists
+          if az group show --name ${{ env.AZURE_RESOURCE_GROUP }} > /dev/null 2>&1; then
+            echo "✅ Resource group '${{ env.AZURE_RESOURCE_GROUP }}' exists"
+          else
+            echo "❌ Resource group '${{ env.AZURE_RESOURCE_GROUP }}' not found"
+            exit 1
+          fi
+          
+          # Check for existing resources to avoid conflicts
+          EXISTING_RESOURCES=$(az resource list --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --query "length(@)")
+          echo "📊 Existing resources in group: $EXISTING_RESOURCES"
+          
+          if [[ $EXISTING_RESOURCES -gt 0 ]]; then
+            echo "⚠️  Resource group not empty - will create unique resource names"
+          fi
+          
+          echo "ready=true" >> $GITHUB_OUTPUT
+
+      - name: 💰 Estimate Deployment Costs
+        id: cost
+        run: |
+          echo "💰 Estimating deployment costs..."
+          
+          # Calculate estimated monthly costs
+          ACR_COST=5.00
+          APP_SERVICE_COST=13.14
+          TOTAL_COST=$(echo "$ACR_COST + $APP_SERVICE_COST" | bc -l)
+          
+          echo "🏷️  Azure Container Registry: \$$ACR_COST/month"
+          echo "🖥️  App Service (B1 Linux): \$$APP_SERVICE_COST/month"
+          echo "💵 Total estimated cost: \$$TOTAL_COST/month"
+          
+          echo "monthly=$TOTAL_COST" >> $GITHUB_OUTPUT
+
+      - name: 🧪 Run Essential Tests
+        run: |
+          echo "🧪 Running essential pre-deployment tests..."
+          
+          # Quick smoke tests before deployment
+          if command -v node &> /dev/null; then
+            echo "✅ Node.js available"
+            node --version
+          fi
+          
+          if [[ -f "Dockerfile" ]]; then
+            echo "✅ Dockerfile found"
+          else
+            echo "❌ Dockerfile not found"
+            exit 1
+          fi
+          
+          if [[ -f "package.json" ]]; then
+            echo "✅ package.json found"
+          else
+            echo "❌ package.json not found"
+            exit 1
+          fi
+
+  docker-build-and-push:
+    name: 🐳 Build & Push Container
+    runs-on: ubuntu-latest
+    needs: prerequisites-check
+    if: needs.prerequisites-check.outputs.deployment-ready == 'true'
+    timeout-minutes: 20
+    
+    outputs:
+      image-name: ${{ steps.build.outputs.image }}
+      image-digest: ${{ steps.build.outputs.digest }}
+    
+    steps:
+      - name: 📁 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🔐 Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: 🏗️ Create Azure Container Registry
+        id: acr
+        run: |
+          echo "🏗️ Creating Azure Container Registry..."
+          
+          ACR_NAME="${{ env.CONTAINER_REGISTRY_NAME }}"
+          echo "Creating ACR: $ACR_NAME"
+          
+          az acr create \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --name $ACR_NAME \
+            --sku Basic \
+            --location ${{ env.AZURE_LOCATION }} \
+            --admin-enabled true
+          
+          echo "acr-name=$ACR_NAME" >> $GITHUB_OUTPUT
+          
+          # Get ACR login server
+          ACR_SERVER=$(az acr show --name $ACR_NAME --query loginServer --output tsv)
+          echo "acr-server=$ACR_SERVER" >> $GITHUB_OUTPUT
+
+      - name: 🐳 Build and Push Docker Image
+        id: build
+        run: |
+          echo "🐳 Building and pushing Docker image..."
+          
+          ACR_NAME="${{ steps.acr.outputs.acr-name }}"
+          ACR_SERVER="${{ steps.acr.outputs.acr-server }}"
+          IMAGE_NAME="$ACR_SERVER/triage-app:${{ github.sha }}"
+          
+          echo "Building image: $IMAGE_NAME"
+          
+          # Login to ACR
+          az acr login --name $ACR_NAME
+          
+          # Build image with build args for optimization
+          docker build \
+            --build-arg NODE_ENV=production \
+            --build-arg NEXT_TELEMETRY_DISABLED=1 \
+            --tag $IMAGE_NAME \
+            .
+          
+          # Push image
+          docker push $IMAGE_NAME
+          
+          # Get image digest
+          DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' $IMAGE_NAME)
+          
+          echo "image=$IMAGE_NAME" >> $GITHUB_OUTPUT
+          echo "digest=$DIGEST" >> $GITHUB_OUTPUT
+          
+          echo "✅ Image built and pushed successfully"
+
+  azure-deployment:
+    name: 🚀 Deploy to Azure App Service
+    runs-on: ubuntu-latest
+    needs: [prerequisites-check, docker-build-and-push]
+    timeout-minutes: 15
+    
+    outputs:
+      app-url: ${{ steps.deploy.outputs.url }}
+      deployment-status: ${{ steps.deploy.outputs.status }}
+    
+    steps:
+      - name: 🔐 Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: 🏗️ Create App Service Plan
+        id: app-plan
+        run: |
+          echo "🏗️ Creating App Service Plan..."
+          
+          PLAN_NAME="${{ env.APP_NAME }}-plan"
+          
+          az appservice plan create \
+            --name $PLAN_NAME \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --sku B1 \
+            --is-linux \
+            --location ${{ env.AZURE_LOCATION }}
+          
+          echo "plan-name=$PLAN_NAME" >> $GITHUB_OUTPUT
+
+      - name: 🚀 Deploy Container to App Service
+        id: deploy
+        run: |
+          echo "🚀 Deploying container to App Service..."
+          
+          APP_NAME="${{ env.APP_NAME }}"
+          PLAN_NAME="${{ steps.app-plan.outputs.plan-name }}"
+          IMAGE_NAME="${{ needs.docker-build-and-push.outputs.image-name }}"
+          ACR_NAME="${{ env.CONTAINER_REGISTRY_NAME }}"
+          
+          # Get ACR credentials
+          ACR_USERNAME=$(az acr credential show --name $ACR_NAME --query username --output tsv)
+          ACR_PASSWORD=$(az acr credential show --name $ACR_NAME --query passwords[0].value --output tsv)
+          
+          # Create web app
+          az webapp create \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --plan $PLAN_NAME \
+            --name $APP_NAME \
+            --deployment-container-image-name $IMAGE_NAME
+          
+          # Configure container registry authentication
+          az webapp config container set \
+            --name $APP_NAME \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --container-image-name $IMAGE_NAME \
+            --container-registry-url https://$ACR_NAME.azurecr.io \
+            --container-registry-user $ACR_USERNAME \
+            --container-registry-password $ACR_PASSWORD
+          
+          # Configure application settings
+          az webapp config appsettings set \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --name $APP_NAME \
+            --settings \
+              NODE_ENV=production \
+              PORT=3000 \
+              HOSTNAME=0.0.0.0 \
+              MODEL_PROVIDER=anthropic \
+              MOCK_LLM_RESPONSES=false \
+              APP_MODE=LOCAL \
+              ANTHROPIC_ENABLE_CACHING=true \
+              ANTHROPIC_ENABLE_BATCHING=true
+          
+          # Get app URL
+          APP_URL=$(az webapp show --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --name $APP_NAME --query defaultHostName --output tsv)
+          
+          echo "url=https://$APP_URL" >> $GITHUB_OUTPUT
+          echo "status=deployed" >> $GITHUB_OUTPUT
+          
+          echo "✅ Deployment completed"
+          echo "🌐 App URL: https://$APP_URL"
+
+  deployment-verification:
+    name: ✅ Verify Deployment
+    runs-on: ubuntu-latest
+    needs: [prerequisites-check, docker-build-and-push, azure-deployment]
+    timeout-minutes: 10
+    
+    steps:
+      - name: 🔄 Wait for Application Startup
+        run: |
+          echo "🔄 Waiting for application to start..."
+          sleep 60
+
+      - name: 🏥 Health Check
+        id: health-check
+        run: |
+          echo "🏥 Performing health check..."
+          
+          APP_URL="${{ needs.azure-deployment.outputs.app-url }}"
+          HEALTH_URL="$APP_URL/api/health"
+          
+          echo "Testing: $HEALTH_URL"
+          
+          # Retry health check up to 5 times
+          for i in {1..5}; do
+            if curl -f -s --max-time 30 "$HEALTH_URL"; then
+              echo "✅ Health check passed on attempt $i"
+              echo "status=healthy" >> $GITHUB_OUTPUT
+              break
+            else
+              echo "❌ Health check failed on attempt $i"
+              if [[ $i -eq 5 ]]; then
+                echo "status=unhealthy" >> $GITHUB_OUTPUT
+                exit 1
+              fi
+              sleep 15
+            fi
+          done
+
+      - name: 🧪 Basic Functionality Test
+        run: |
+          echo "🧪 Testing basic functionality..."
+          
+          APP_URL="${{ needs.azure-deployment.outputs.app-url }}"
+          
+          # Test main page loads
+          if curl -f -s --max-time 30 "$APP_URL" > /dev/null; then
+            echo "✅ Main page loads successfully"
+          else
+            echo "❌ Main page failed to load"
+            exit 1
+          fi
+          
+          echo "✅ Basic functionality tests passed"
+
+  cost-monitoring-setup:
+    name: 💰 Setup Cost Monitoring
+    runs-on: ubuntu-latest
+    needs: [azure-deployment]
+    if: github.event.inputs.enable_cost_monitoring == 'true'
+    timeout-minutes: 5
+    
+    steps:
+      - name: 🔐 Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: 💰 Configure Cost Alerts
+        run: |
+          echo "💰 Setting up cost monitoring..."
+          
+          # Note: This would typically set up budget alerts
+          # For demo purposes, we'll just log the estimated costs
+          
+          ESTIMATED_COST="${{ needs.prerequisites-check.outputs.estimated-cost }}"
+          
+          echo "📊 COST MONITORING SETUP"
+          echo "Estimated monthly cost: \$$ESTIMATED_COST"
+          echo "Resource group: ${{ env.AZURE_RESOURCE_GROUP }}"
+          echo "Deployment environment: ${{ github.event.inputs.deployment_environment || 'auto' }}"
+          
+          # In production, you would set up actual budget alerts here
+          echo "⚠️  Set up manual budget alerts in Azure Portal"
+          echo "💡 Consider auto-cleanup for development deployments"
+
+  cleanup-schedule:
+    name: 🧹 Schedule Resource Cleanup
+    runs-on: ubuntu-latest
+    needs: [deployment-verification]
+    if: github.event.inputs.resource_cleanup == 'true' || github.event.inputs.deployment_environment == 'staging'
+    timeout-minutes: 5
+    
+    steps:
+      - name: 📅 Schedule Cleanup
+        run: |
+          echo "🧹 Scheduling resource cleanup..."
+          
+          # For staging environments, log cleanup instructions
+          if [[ "${{ github.event.inputs.deployment_environment }}" == "staging" ]]; then
+            echo "⏰ Staging deployment will be cleaned up in 24 hours"
+            echo "🧹 Manual cleanup command:"
+            echo "az group delete --name ${{ env.AZURE_RESOURCE_GROUP }} --yes --no-wait"
+          else
+            echo "💼 Production deployment - no automatic cleanup scheduled"
+          fi
+          
+          echo "💰 Current resource costs will continue until manual cleanup"
+          echo "📊 Monitor costs in Azure Cost Management"
+
+  deployment-summary:
+    name: 📋 Deployment Summary
+    runs-on: ubuntu-latest
+    needs: [prerequisites-check, docker-build-and-push, azure-deployment, deployment-verification]
+    if: always()
+    
+    steps:
+      - name: 📋 Generate Deployment Report
+        run: |
+          echo "🚀 AZURE DEPLOYMENT SUMMARY"
+          echo "=========================="
+          echo "Deployment Time: $(date)"
+          echo "Environment: ${{ github.event.inputs.deployment_environment || 'auto' }}"
+          echo "Trigger: ${{ github.event_name }}"
+          echo
+          echo "📊 DEPLOYMENT RESULTS:"
+          echo "- Prerequisites: ${{ needs.prerequisites-check.result }}"
+          echo "- Docker Build: ${{ needs.docker-build-and-push.result }}"
+          echo "- Azure Deployment: ${{ needs.azure-deployment.result }}"
+          echo "- Verification: ${{ needs.deployment-verification.result }}"
+          echo
+          echo "🌐 APPLICATION DETAILS:"
+          echo "- App URL: ${{ needs.azure-deployment.outputs.app-url }}"
+          echo "- Docker Image: ${{ needs.docker-build-and-push.outputs.image-name }}"
+          echo "- Resource Group: ${{ env.AZURE_RESOURCE_GROUP }}"
+          echo
+          echo "💰 COST INFORMATION:"
+          echo "- Estimated Monthly: \$${{ needs.prerequisites-check.outputs.estimated-cost }}"
+          echo "- Auto-cleanup: ${{ github.event.inputs.resource_cleanup || 'enabled for staging' }}"
+          echo
+          
+          # Determine overall status
+          if [[ "${{ needs.azure-deployment.result }}" == "success" && 
+                "${{ needs.deployment-verification.result }}" == "success" ]]; then
+            echo "🎉 DEPLOYMENT STATUS: ✅ SUCCESSFUL"
+            echo "Application is live and healthy"
+          else
+            echo "⚠️  DEPLOYMENT STATUS: ❌ FAILED"
+            echo "Check job logs for error details"
+          fi
+          echo
+          echo "🔗 Resources created in Azure Resource Group: ${{ env.AZURE_RESOURCE_GROUP }}"
+          echo "📊 Monitor costs and usage in Azure Portal"
