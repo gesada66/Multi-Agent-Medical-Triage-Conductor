@@ -1,6 +1,6 @@
 # Multi-Agent Medical Triage Conductor
 
-A Next.js 14 application, based on semantic kernel supported in Azure Foundry AI. 
+A Next.js 14 application, based on semantic kernel supported in Azure AI Foundry.
 that orchestrates multiple AI agents to perform clinical triage, providing risk 
 assessment and care pathway recommendations for medical symptoms.
 
